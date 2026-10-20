@@ -53,8 +53,11 @@ use crate::theme::{Tokens, bold};
 pub const TRANSCRIBE: &str = "window.ai_transcribe";
 /// Clip › AI › Text to Speech Clip…
 pub const SPEECH: &str = "window.ai_speech";
-/// Setup › Preferences… and Clip › AI › AI Settings…: the Preferences window, its AI section.
+/// Setup › Preferences…: the engine's own `setup.preferences`, and the Preferences window with its
+/// AI section where AI is on.
 pub const PREFERENCES: &str = "window.preferences";
+/// Clip › AI › AI Settings…: the Preferences window.
+pub const AI_SETTINGS: &str = "window.ai_settings";
 pub const TRANSCRIBE_PATH: &str = "Clip > AI > Transcribe to Markers...";
 pub const SPEECH_PATH: &str = "Clip > AI > Text to Speech Clip...";
 pub const SETTINGS_PATH: &str = "Clip > AI > AI Settings...";
@@ -397,16 +400,27 @@ fn waiting_note(ready: &str, why: &str, todo: &str) -> String {
 // ---- the menu -----------------------------------------------------------------------------------
 
 /// Whether an AI menu item is enabled (`None` for other ids): only where AI is on.
+/// Setup › Preferences… stays enabled as before; the Clip › AI items only where AI is on.
 pub fn item_enabled(app: &SoundApp, id: &str) -> Option<bool> {
-    matches!(id, TRANSCRIBE | SPEECH | PREFERENCES).then_some(app.ai.is_some())
+    matches!(id, TRANSCRIBE | SPEECH | AI_SETTINGS).then_some(app.ai.is_some())
 }
 
 /// Run an AI window command (`None` for other ids): show or hide its window, like the app's other
 /// `window.*` commands (`{"value": bool}`, else a toggle). Nothing is sent here.
 pub fn run(app: &mut SoundApp, id: &str, p: &Value) -> Option<Result<Value, String>> {
-    if !matches!(id, TRANSCRIBE | SPEECH | PREFERENCES) {
+    if !matches!(id, TRANSCRIBE | SPEECH | PREFERENCES | AI_SETTINGS) {
         return None;
     }
+    // Setup › Preferences… still runs the engine's own command (the edit preferences, for agents);
+    // where AI is on, it also shows the Preferences window.
+    let prefs = if id == PREFERENCES {
+        match app.engine.execute("setup.preferences", &json!({})) {
+            Ok(v) if app.ai.is_some() => Some(v),
+            r => return Some(r.map_err(|e| e.to_string())),
+        }
+    } else {
+        None
+    };
     let Some(ai) = app.ai.as_mut() else { return Some(Err(OFF.into())) };
     let open = match id {
         TRANSCRIBE => &mut ai.transcribe_window,
@@ -419,7 +433,11 @@ pub fn run(app: &mut SoundApp, id: &str, p: &Value) -> Option<Result<Value, Stri
         // the clip when one is selected, else the selection
         ai.use_clip = true;
     }
-    Some(Ok(json!({"value": shown})))
+    let mut out = prefs.unwrap_or_else(|| json!({}));
+    if let Some(o) = out.as_object_mut() {
+        o.insert("value".into(), json!(shown));
+    }
+    Some(Ok(out))
 }
 
 // ---- what a transcription sends -----------------------------------------------------------------
@@ -1714,20 +1732,29 @@ mod tests {
         let labels: Vec<&str> = ai_menu.children.iter().map(|n| n.label.as_str()).collect();
         assert_eq!(labels, ["Transcribe to Markers...", "Text to Speech Clip...", "AI Settings..."]);
         let extra = menus::ui_aliases();
-        for (path, id) in [(TRANSCRIBE_PATH, TRANSCRIBE), (SPEECH_PATH, SPEECH), (SETTINGS_PATH, PREFERENCES), (PREFERENCES_PATH, PREFERENCES)] {
+        for (path, id) in [(TRANSCRIBE_PATH, TRANSCRIBE), (SPEECH_PATH, SPEECH), (SETTINGS_PATH, AI_SETTINGS), (PREFERENCES_PATH, PREFERENCES)] {
             assert_eq!(menus::command_for_path(path, &extra).as_deref(), Some(id), "{path}");
         }
         let mut app = demo_app();
-        assert!(!menus::item_state(&app, TRANSCRIBE_PATH, Some(TRANSCRIBE)).0, "AI is off");
+        for (path, id) in [(TRANSCRIBE_PATH, TRANSCRIBE), (SPEECH_PATH, SPEECH), (SETTINGS_PATH, AI_SETTINGS)] {
+            assert!(!menus::item_state(&app, path, Some(id)).0, "AI is off: {path}");
+        }
         assert_eq!(app.run(TRANSCRIBE, json!({"value": true})), Err(OFF.into()));
+        // Setup › Preferences… runs the engine's own command, with AI off as before
+        assert!(menus::item_state(&app, PREFERENCES_PATH, Some(PREFERENCES)).0);
+        assert!(app.run(PREFERENCES, json!({"value": true})).unwrap().get("edit").is_some());
         with_ai(&mut app, "menu");
         assert!(menus::item_state(&app, TRANSCRIBE_PATH, Some(TRANSCRIBE)).0);
         // the items open windows; nothing is sent
         menus::invoke_menu(&mut app, TRANSCRIBE, TRANSCRIBE_PATH);
         menus::invoke_menu(&mut app, SPEECH, SPEECH_PATH);
-        menus::invoke_menu(&mut app, PREFERENCES, PREFERENCES_PATH);
+        let r = app.run(PREFERENCES, json!({"value": true})).unwrap();
+        assert!(r.get("edit").is_some() && r["value"] == true, "{r}");
         let ai = app.ai.as_ref().unwrap();
         assert!(ai.transcribe_window && ai.speech_window && ai.prefs_window && !ai.working());
+        app.ai.as_mut().unwrap().prefs_window = false;
+        menus::invoke_menu(&mut app, AI_SETTINGS, SETTINGS_PATH);
+        assert!(app.ai.as_ref().unwrap().prefs_window);
     }
 
     #[test]

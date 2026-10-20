@@ -464,7 +464,7 @@ const MENU_WINDOWS: &[(&str, &str)] = &[
     #[cfg(not(target_arch = "wasm32"))]
     (crate::ai::SPEECH_PATH, crate::ai::SPEECH),
     #[cfg(not(target_arch = "wasm32"))]
-    (crate::ai::SETTINGS_PATH, crate::ai::PREFERENCES),
+    (crate::ai::SETTINGS_PATH, crate::ai::AI_SETTINGS),
 ];
 
 /// The shortcut of an engine or window command.
