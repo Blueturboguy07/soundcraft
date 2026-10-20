@@ -125,6 +125,20 @@ fn config_dir() -> Option<std::path::PathBuf> {
     config::config_dir()
 }
 
+/// What publik needs to know about this build. The app token is public by design (it can only mint
+/// capped keys attributed to SoundCraft) and lives at the repository root, so source builds carry
+/// it. AI settings (`ai.json`) go in `config`, the settings folder that holds `ui.json`.
+fn app_info(config: Option<std::path::PathBuf>) -> soundcraft_ui_egui::ai::AppInfo {
+    soundcraft_ui_egui::ai::AppInfo {
+        slug: "soundcraft",
+        name: "SoundCraft",
+        version: env!("CARGO_PKG_VERSION"),
+        app_token: include_str!("../../../publik-app-token.txt"),
+        dialects: &["audio_transcriptions", "audio_speech"],
+        config_dir: config,
+    }
+}
+
 fn prefs_path() -> Option<std::path::PathBuf> {
     config_dir().map(|b| b.join("ui.json"))
 }
@@ -204,6 +218,13 @@ fn app_icon() -> Option<egui::IconData> {
 }
 
 fn main() -> eframe::Result {
+    // Builder check (publikhq.com/skills/setup.md): the built app provisions publik API for real
+    // and prints one line. The builder who runs it is the consent. Before anything else, so the
+    // check opens no window and leaves no log file.
+    if std::env::var_os("PUBLIK_SELF_TEST").is_some() {
+        println!("{}", soundcraft_ui_egui::ai::self_test(&app_info(config_dir())));
+        return Ok(());
+    }
     // First, so every start-up record (and the engine's panic hook, installed with the first
     // Engine) is captured; see `logging`.
     let logger = logging::install();
@@ -281,6 +302,20 @@ fn main() -> eframe::Result {
             }
             for f in &files {
                 open_path(&mut app, f);
+            }
+            // AI through publik API or the person's own key (Clip ▸ AI, Setup ▸ Preferences); the
+            // first launch asks. Only with preferences on and a settings folder to keep the choice
+            // in: runs without preferences (agents' test runs) never see the setup window, and an
+            // agent driving the app over `--control` does not get it on launch. Before the system
+            // menu bar is built, so its AI items start enabled.
+            if prefs_enabled()
+                && let Some(dir) = config_dir()
+            {
+                let mut ai = soundcraft_ui_egui::ai::Ai::new(app_info(Some(dir)));
+                if control_port.is_some() {
+                    ai.skip_first_run();
+                }
+                app.ai = Some(ai);
             }
             // If the system menu bar cannot be built, keep the egui menu bar rather than fail to start.
             #[cfg(target_os = "macos")]
