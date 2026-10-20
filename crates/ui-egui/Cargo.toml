@@ -27,6 +27,12 @@ serde_json.workspace = true
 log.workspace = true
 image.workspace = true
 
+# Clip ▸ AI (desktop only): publik API as the zero-setup AI option, or the person's own key.
+# craft-publik holds provisioning, the credential file, the calls and the setup flow; it talks to the
+# network through the system's curl, only after the person sets it up and clicks.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+craft-publik = { path = "../../../craft-publik", features = ["egui"] }
+
 [dev-dependencies]
 egui_kittest = { workspace = true, features = ["wgpu", "snapshot"] }
 

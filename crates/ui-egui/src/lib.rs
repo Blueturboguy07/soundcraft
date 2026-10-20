@@ -4,6 +4,9 @@
 //! executing commands. It can be replaced without touching anything below it.
 #![deny(clippy::unwrap_used, clippy::expect_used, clippy::panic, clippy::unimplemented, clippy::todo, clippy::unreachable)]
 
+/// AI through publik API or the person's own key (Clip ▸ AI, Setup ▸ Preferences): desktop only.
+#[cfg(not(target_arch = "wasm32"))]
+pub mod ai;
 pub mod bounce;
 pub mod control;
 pub mod credits;
@@ -329,6 +332,11 @@ pub struct SoundApp {
     pub video: video_track::VideoPool,
     /// The Bounce Mix in progress, rendered a slice per frame.
     pub bounce: Option<soundcraft_engine::io::Bounce>,
+    /// AI through publik API or the person's own key (Clip ▸ AI, Setup ▸ Preferences). `None` until
+    /// the desktop app installs it, and in tests, runs without preferences and the browser build,
+    /// where no setup window may appear and nothing may be sent.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub ai: Option<ai::Ai>,
     /// Test-only: owns the process-wide palette lock while this app exists, so frames painted
     /// and colour assertions in one test can never straddle another test's palette change.
     #[cfg(test)]
@@ -404,6 +412,8 @@ impl SoundApp {
             last_meter_poll: f64::NEG_INFINITY,
             video: video_track::VideoPool::default(),
             bounce: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            ai: None,
             #[cfg(test)]
             _palette_lock: theme::lock_test_palette(),
         }
@@ -1170,6 +1180,11 @@ impl SoundApp {
         }
         self.watch_output();
         self.watch_input();
+        // AI: results that came back are placed, the audio a transcription sends renders a slice,
+        // and the first launch asks how to set AI up. Before the transport, which takes the request
+        // that tells a replaced session.
+        #[cfg(not(target_arch = "wasm32"))]
+        ai::frame(self, ctx);
         // Stop the old playback before sending a replacement session to the audio thread.
         self.handle_transport(dt);
         if self.engine.revision != self.last_rev {
@@ -1262,6 +1277,8 @@ impl SoundApp {
         recovery::show(self, &ctx);
         score_editor::show(self, &ctx);
         palette::show(self, &ctx);
+        #[cfg(not(target_arch = "wasm32"))]
+        ai::show(self, &ctx);
         dialogs::show(self, &ctx);
         // Here, not in logic(): a covered or minimized window runs only logic(), with no vsync to pace it.
         if self.meters_live() {

@@ -73,6 +73,13 @@ pub const UI_COMMANDS: &[(&str, &str, &str, Option<&str>)] = &[
     ("ui.bounce_dialog", "Bounce Mix…", "", None),
     ("ui.set", "Set UI State", "", None),
     ("ui.theme", "Appearance", "", None),
+    // Setup ▸ Preferences and Clip ▸ AI (desktop only; their menu paths are in `MENU_WINDOWS`)
+    #[cfg(not(target_arch = "wasm32"))]
+    (crate::ai::PREFERENCES, "Preferences", "", None),
+    #[cfg(not(target_arch = "wasm32"))]
+    (crate::ai::TRANSCRIBE, "Transcribe to Markers", "", None),
+    #[cfg(not(target_arch = "wasm32"))]
+    (crate::ai::SPEECH, "Text to Speech Clip", "", None),
 ];
 
 /// Extra catalog mappings handled by the UI layer.
@@ -331,6 +338,11 @@ pub fn command_for_path(path: &str, extra: &[(&str, &str)]) -> Option<String> {
 
 /// Enabled and checked state shared by all menu presentations.
 pub fn item_state(app: &SoundApp, path: &str, id: Option<&str>) -> (bool, bool) {
+    // The AI items work only where AI is on (the desktop app with its preferences).
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Some(on) = id.and_then(|i| crate::ai::item_enabled(app, i)) {
+        return (on, checked_state(app, path, id));
+    }
     let enabled = match id {
         Some(i)
             if i.starts_with("window.") || i.starts_with("view.mix_section") || matches!(i, "audiosuite.process" | "ui.dock" | "ui.dock.reset") =>
@@ -443,6 +455,16 @@ const MENU_WINDOWS: &[(&str, &str)] = &[
     ("Event > Time Operations > Time Operations Window", "window.time_ops"),
     ("Event > MIDI Operations > MIDI Operations Window", "window.midi_ops"),
     ("Event > MIDI Real-Time Properties", "window.rtp"),
+    // AI through publik API or the person's own key, desktop only (`crate::ai`). The Clip menu
+    // keeps the clip tools, so its AI submenu comes last there.
+    #[cfg(not(target_arch = "wasm32"))]
+    (crate::ai::PREFERENCES_PATH, crate::ai::PREFERENCES),
+    #[cfg(not(target_arch = "wasm32"))]
+    (crate::ai::TRANSCRIBE_PATH, crate::ai::TRANSCRIBE),
+    #[cfg(not(target_arch = "wasm32"))]
+    (crate::ai::SPEECH_PATH, crate::ai::SPEECH),
+    #[cfg(not(target_arch = "wasm32"))]
+    (crate::ai::SETTINGS_PATH, crate::ai::PREFERENCES),
 ];
 
 /// The shortcut of an engine or window command.
@@ -510,6 +532,11 @@ pub fn run_ui_command(app: &mut SoundApp, id: &str, p: &Value) -> Option<Result<
     }
     if id == "ui.audio_device" {
         return Some(crate::windows::audio_device_command(app, p));
+    }
+    // Setup ▸ Preferences and Clip ▸ AI open their windows; nothing is sent from here.
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Some(r) = crate::ai::run(app, id, p) {
+        return Some(r);
     }
     let toggle = |v: &mut bool| {
         *v = p.get("value").and_then(Value::as_bool).unwrap_or(!*v);
