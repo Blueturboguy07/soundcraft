@@ -624,8 +624,7 @@ fn about(app: &mut SoundApp, ctx: &egui::Context) {
                 ui.label(format!("Version {}", env!("CARGO_PKG_VERSION")));
                 ui.label("An open-source digital audio workstation from the ArtCraft team.");
                 ui.label("Dual-licensed MIT OR Apache-2.0. Made with Rust and egui.");
-                ui.hyperlink_to("getartcraft.com/apps/soundcraft", "https://getartcraft.com/apps/soundcraft");
-                ui.hyperlink_to("Join us on Discord", "https://discord.gg/artcraft");
+                ui.hyperlink_to("publikhq.com/soundcraft", "https://publikhq.com/soundcraft");
             }
         }
     });

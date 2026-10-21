@@ -26,10 +26,10 @@
   <launchable type="desktop-id">ai.storyteller.soundcraft.desktop</launchable>
   <icon type="stock">ai.storyteller.soundcraft</icon>
   <!-- Only url types known to appstream 0.15 (Ubuntu 22.04, where CI validates): no vcs-browser. -->
-  <url type="homepage">https://getartcraft.com/apps/soundcraft</url>
-  <url type="bugtracker">https://github.com/storytold/soundcraft/issues</url>
-  <url type="help">https://github.com/storytold/soundcraft</url>
-  <url type="contact">https://discord.gg/artcraft</url>
+  <url type="homepage">https://publikhq.com/soundcraft</url>
+  <url type="bugtracker">https://github.com/Blueturboguy07/soundcraft/issues</url>
+  <url type="help">https://github.com/Blueturboguy07/soundcraft</url>
+  <url type="contact">https://publikhq.com/soundcraft</url>
   <categories>
     <category>AudioVideo</category>
     <category>Audio</category>

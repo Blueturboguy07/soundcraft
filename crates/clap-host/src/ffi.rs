@@ -230,7 +230,7 @@ impl Bundle {
             host_data: Arc::as_ptr(&state).cast_mut().cast::<c_void>(),
             name: c"SoundCraft".as_ptr(),
             vendor: c"SoundCraft contributors".as_ptr(),
-            url: c"https://github.com/storytold/soundcraft".as_ptr(),
+            url: c"https://github.com/Blueturboguy07/soundcraft".as_ptr(),
             version: c"0.1.0".as_ptr(),
             get_extension: Some(host_get_extension),
             request_restart: Some(host_request_restart),
