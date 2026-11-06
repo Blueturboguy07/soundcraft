@@ -3719,6 +3719,7 @@ dependencies = [
  "soundcraft-automation",
  "soundcraft-dsp",
  "soundcraft-engine",
+ "ureq",
 ]
 
 [[package]]
