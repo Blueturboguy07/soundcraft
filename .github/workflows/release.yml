@@ -16,6 +16,8 @@ concurrency:
 
 jobs:
   release:
+    # publik: never from a publik tag (v*-publik*). A run there could upload files into publik's release.
+    if: ${{ !contains(github.ref, '-publik') }}
     # The shared workflow creates the draft release, which needs write access to contents.
     permissions:
       contents: write
