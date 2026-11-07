@@ -5,8 +5,8 @@
 //! - the setup window on the first launch (once, after a few frames, when no dialog, recovery offer
 //!   or bounce shows; "Later" ends it for good; never while an agent drives the app over
 //!   `--control`),
-//! - Setup › Preferences… (its AI section: status, sign-in and key controls, the setup flow in
-//!   place), also reached from Clip › AI › AI Settings…,
+//! - Clip › AI › AI Settings… (status, sign-in and key controls, the setup flow in place). Setup ›
+//!   Preferences… is the app's own Preferences window since upstream 0.18,
 //! - Clip › AI › Transcribe to Markers… and Text to Speech Clip…, two windows.
 //!
 //! Nothing is sent, and nothing is charged, until the person clicks Transcribe or Generate.
@@ -53,10 +53,10 @@ use crate::theme::{Tokens, bold};
 pub const TRANSCRIBE: &str = "window.ai_transcribe";
 /// Clip › AI › Text to Speech Clip…
 pub const SPEECH: &str = "window.ai_speech";
-/// Setup › Preferences…: the engine's own `setup.preferences`, and the Preferences window with its
-/// AI section where AI is on.
+/// `window.preferences` (agents, no menu item): the engine's own `setup.preferences`, and the AI
+/// Settings window where AI is on. Setup › Preferences… opens the app's own Preferences window.
 pub const PREFERENCES: &str = "window.preferences";
-/// Clip › AI › AI Settings…: the Preferences window.
+/// Clip › AI › AI Settings…: the AI Settings window.
 pub const AI_SETTINGS: &str = "window.ai_settings";
 pub const TRANSCRIBE_PATH: &str = "Clip > AI > Transcribe to Markers...";
 pub const SPEECH_PATH: &str = "Clip > AI > Text to Speech Clip...";
@@ -112,7 +112,7 @@ pub struct Ai {
     pub transcribe_window: bool,
     pub speech_window: bool,
     pub prefs_window: bool,
-    /// The Preferences window shows the setup flow in place of the AI status.
+    /// The AI Settings window shows the setup flow in place of the AI status.
     inline_setup: bool,
     /// Transcribe the selected clip (else the session mix of the selection) when both are there.
     use_clip: bool,
@@ -222,7 +222,7 @@ impl Ai {
     }
 
     /// Do not open the setup window on this launch (an agent drives the app over `--control`).
-    /// Preferences and the AI windows still offer it.
+    /// AI Settings and the AI windows still offer it.
     pub fn skip_first_run(&mut self) {
         self.first_run_checked = true;
     }
@@ -400,7 +400,7 @@ fn waiting_note(ready: &str, why: &str, todo: &str) -> String {
 // ---- the menu -----------------------------------------------------------------------------------
 
 /// Whether an AI menu item is enabled (`None` for other ids): only where AI is on.
-/// Setup › Preferences… stays enabled as before; the Clip › AI items only where AI is on.
+/// The Clip › AI items only where AI is on.
 pub fn item_enabled(app: &SoundApp, id: &str) -> Option<bool> {
     matches!(id, TRANSCRIBE | SPEECH | AI_SETTINGS).then_some(app.ai.is_some())
 }
@@ -411,8 +411,8 @@ pub fn run(app: &mut SoundApp, id: &str, p: &Value) -> Option<Result<Value, Stri
     if !matches!(id, TRANSCRIBE | SPEECH | PREFERENCES | AI_SETTINGS) {
         return None;
     }
-    // Setup › Preferences… still runs the engine's own command (the edit preferences, for agents);
-    // where AI is on, it also shows the Preferences window.
+    // `window.preferences` still runs the engine's own command (the edit preferences, for agents);
+    // where AI is on, it also shows the AI Settings window.
     let prefs = if id == PREFERENCES {
         match app.engine.execute("setup.preferences", &json!({})) {
             Ok(v) if app.ai.is_some() => Some(v),
@@ -1364,10 +1364,10 @@ fn speech_window(app: &mut SoundApp, ctx: &egui::Context) {
     }
 }
 
-// ---- Setup › Preferences ------------------------------------------------------------------------
+// ---- Clip › AI › AI Settings -------------------------------------------------------------------
 
-/// Setup › Preferences…: its AI section holds what is in use, the sign-in and key controls, and
-/// the setup flow in place. The settings take effect at once.
+/// Clip › AI › AI Settings…: what is in use, the sign-in and key controls, and the setup flow in
+/// place. The settings take effect at once. (Setup › Preferences… is the app's own window.)
 fn prefs_window(app: &mut SoundApp, ctx: &egui::Context) {
     let Some(ai) = app.ai.as_mut() else { return };
     if !ai.prefs_window {
@@ -1375,7 +1375,7 @@ fn prefs_window(app: &mut SoundApp, ctx: &egui::Context) {
     }
     let mut open = true;
     let mut action = Action::None;
-    window("Preferences", "ai-preferences", ctx).open(&mut open).show(ctx, |ui| {
+    window("AI Settings", "ai-preferences", ctx).open(&mut open).show(ctx, |ui| {
         ui.set_max_width(460.0);
         ui.label(RichText::new("AI").font(bold(13.0)));
         ui.add_space(4.0);
@@ -1391,7 +1391,7 @@ fn prefs_window(app: &mut SoundApp, ctx: &egui::Context) {
     }
 }
 
-/// The AI section of Preferences.
+/// The AI Settings window's contents.
 fn prefs_section(ai: &mut Ai, ui: &mut egui::Ui) -> Action {
     dim(ui, "Clip › AI › Transcribe to Markers and Text to Speech Clip use publik API or your own key. Changes here take effect at once.");
     ui.add_space(6.0);
@@ -1732,16 +1732,17 @@ mod tests {
         let labels: Vec<&str> = ai_menu.children.iter().map(|n| n.label.as_str()).collect();
         assert_eq!(labels, ["Transcribe to Markers...", "Text to Speech Clip...", "AI Settings..."]);
         let extra = menus::ui_aliases();
-        for (path, id) in [(TRANSCRIBE_PATH, TRANSCRIBE), (SPEECH_PATH, SPEECH), (SETTINGS_PATH, AI_SETTINGS), (PREFERENCES_PATH, PREFERENCES)] {
+        for (path, id) in [(TRANSCRIBE_PATH, TRANSCRIBE), (SPEECH_PATH, SPEECH), (SETTINGS_PATH, AI_SETTINGS)] {
             assert_eq!(menus::command_for_path(path, &extra).as_deref(), Some(id), "{path}");
         }
+        // Setup › Preferences… is the app's own Preferences window (upstream 0.18), not the AI one
+        assert_eq!(menus::command_for_path(PREFERENCES_PATH, &extra).as_deref(), Some("setup.preferences"));
         let mut app = demo_app();
         for (path, id) in [(TRANSCRIBE_PATH, TRANSCRIBE), (SPEECH_PATH, SPEECH), (SETTINGS_PATH, AI_SETTINGS)] {
             assert!(!menus::item_state(&app, path, Some(id)).0, "AI is off: {path}");
         }
         assert_eq!(app.run(TRANSCRIBE, json!({"value": true})), Err(OFF.into()));
-        // Setup › Preferences… runs the engine's own command, with AI off as before
-        assert!(menus::item_state(&app, PREFERENCES_PATH, Some(PREFERENCES)).0);
+        // `window.preferences` runs the engine's own command, with AI off as before
         assert!(app.run(PREFERENCES, json!({"value": true})).unwrap().get("edit").is_some());
         with_ai(&mut app, "menu");
         assert!(menus::item_state(&app, TRANSCRIBE_PATH, Some(TRANSCRIBE)).0);

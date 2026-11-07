@@ -21,17 +21,25 @@ soundcraft-mix.workspace = true
 soundcraft-engine.workspace = true
 soundcraft-playback.workspace = true
 soundcraft-video.workspace = true
-egui.workspace = true
+# 0.37 makes the bundled faces opt-in; the app's own font loader starts from
+# `FontDefinitions::default()`, and kittest never supplies fonts to this root.
+egui = { workspace = true, features = ["default_fonts", "monochrome_emoji_fonts"] }
+egui_extras = { workspace = true }
+web-time.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 log.workspace = true
 image.workspace = true
 
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus = "5"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+craft-update = { workspace = true }
 # Clip ▸ AI (desktop only): publik API as the zero-setup AI option, or the person's own key.
 # craft-publik holds provisioning, the credential file, the calls and the setup flow; it talks to the
 # network through the system's curl, only after the person sets it up and clicks.
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-craft-publik = { git = "https://github.com/Blueturboguy07/craft-publik", rev = "854bdf66e4d97cb19546fdb0ed0e258a20510f0d", features = ["egui"] }
+craft-publik = { git = "https://github.com/Blueturboguy07/craft-publik", rev = "7926858db80b68c988d6c325b5d287cbe74fc831", features = ["egui"] }
 
 [dev-dependencies]
 egui_kittest = { workspace = true, features = ["wgpu", "snapshot"] }
