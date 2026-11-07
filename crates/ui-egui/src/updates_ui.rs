@@ -2,6 +2,12 @@
 
 use crate::SoundApp;
 
+/// publik's build: publik's launcher installs SoundCraft's updates from publik. Help ▸ Check for
+/// Updates opens this page; this copy never asks storytold's releases and never installs a
+/// non-publik build.
+#[cfg(not(target_arch = "wasm32"))]
+const PUBLIK_PAGE: &str = "https://publikhq.com/soundcraft";
+
 #[cfg(not(target_arch = "wasm32"))]
 use craft_update::dialog::{CheckResultDialog, CheckResultResponse};
 #[cfg(not(target_arch = "wasm32"))]
@@ -38,10 +44,12 @@ impl Default for Runtime {
 }
 
 impl SoundApp {
-    /// Whether the app asks for a newer release when it starts (off until the desktop app turns it on).
+    /// Whether the app asks for a newer release when it starts. publik's build: always off, as
+    /// publik's launcher installs the updates (see [`PUBLIK_PAGE`]).
     #[cfg(not(target_arch = "wasm32"))]
     pub fn set_startup_update_check(&mut self, on: bool) {
-        self.updates_rt.startup_check = on;
+        let _ = on;
+        self.updates_rt.startup_check = false;
     }
 }
 
@@ -61,8 +69,8 @@ pub(crate) fn tick(app: &mut SoundApp, ctx: &egui::Context) {
     {
         let rt = &mut app.updates_rt;
         if std::mem::take(&mut rt.check_requested) {
-            rt.updater.check_now(ctx);
-            rt.manual_window_open = true;
+            // publik's build: open SoundCraft's publik page instead of a check against storytold's releases.
+            ctx.open_url(egui::OpenUrl::new_tab(PUBLIK_PAGE));
         } else if rt.startup_check {
             rt.updater.check_at_start(ctx);
         }
