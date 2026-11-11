@@ -15,8 +15,9 @@ workspace = true
 asio = ["soundcraft-playback/asio"]
 
 [dependencies]
-# publik's usage counts (src/publik_telemetry.rs): the HTTP client that file needs.
-ureq = "2"
+# The publik module (pinned in the root Cargo.toml): Sign in with publik at start-up (`src/publik.rs`),
+# usage counting, and the AI pay choice.
+craft-publik = { workspace = true }
 soundcraft-engine.workspace = true
 soundcraft-audio-io.workspace = true
 soundcraft-ui-egui.workspace = true

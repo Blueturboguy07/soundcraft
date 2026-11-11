@@ -21,9 +21,9 @@ mod logging;
 #[cfg(target_os = "macos")]
 mod native_menu;
 mod switch;
-// publik's usage counts (README: Usage counts). The file is publik's reference client, kept as it is.
-#[rustfmt::skip]
-mod publik_telemetry;
+// Sign in with publik, usage counting and the AI pay choice: this build's publik facts and the
+// gate every publik app opens with.
+mod publik;
 
 use env::Env;
 use soundcraft_audio_io::FileFormat;
@@ -31,7 +31,15 @@ use soundcraft_engine::Engine;
 use soundcraft_ui_egui::{Services, SoundApp, UiState, dialogs};
 use std::sync::Arc;
 
-struct App(SoundApp, Option<&'static logging::AppLogger>, Env, #[cfg(target_os = "macos")] Option<native_menu::NativeMenu>);
+/// The app, its logger and environment, the publik gate, and (macOS) the menu bar.
+struct App(
+    SoundApp,
+    Option<&'static logging::AppLogger>,
+    Env,
+    /// Sign in with publik: drawn before anything of the app until it passes.
+    craft_publik::ui::Gate,
+    #[cfg(target_os = "macos")] Option<native_menu::NativeMenu>,
+);
 
 /// Sends the title only when it changes, remembered here as X11 and Wayland can't read it back.
 fn set_title(ctx: &egui::Context, title: String) {
@@ -51,12 +59,12 @@ impl eframe::App for App {
             logger.report_audio_thread();
         }
         #[cfg(target_os = "macos")]
-        if let Some(menu) = &mut self.3 {
+        if let Some(menu) = &mut self.4 {
             menu.process(&mut self.0);
         }
         self.0.guarded(|app| app.logic(ctx));
         #[cfg(target_os = "macos")]
-        if let Some(menu) = &mut self.3 {
+        if let Some(menu) = &mut self.4 {
             menu.sync(&self.0);
         }
         // Files dropped on the window: audio on an instrument track or a Sampler window loads
@@ -102,6 +110,11 @@ impl eframe::App for App {
         self.0.raw_input_hook(ctx, raw);
     }
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        // Sign in with publik comes first: the gate draws itself until the person is signed in
+        // (and, the first time, has chosen how the app pays for AI). Nothing of the app shows before.
+        if !self.3.ui(ui) {
+            return;
+        }
         self.0.guarded(|app| app.ui(ui));
     }
     fn on_exit(&mut self) {
@@ -114,20 +127,6 @@ impl eframe::App for App {
         // returns: release the player's plugin instances and shut plugin hosting down here.
         self.0.player = None;
         soundcraft_engine::shutdown_plugin_hosts();
-    }
-}
-
-/// What publik needs to know about this build. The app token is public by design (it can only mint
-/// capped keys attributed to SoundCraft) and lives at the repository root, so source builds carry
-/// it. AI settings (`ai.json`) go in `config`, the settings folder that holds `ui.json`.
-fn app_info(config: Option<std::path::PathBuf>) -> soundcraft_ui_egui::ai::AppInfo {
-    soundcraft_ui_egui::ai::AppInfo {
-        slug: "soundcraft",
-        name: "SoundCraft",
-        version: env!("CARGO_PKG_VERSION"),
-        app_token: include_str!("../../../publik-app-token.txt"),
-        dialects: &["audio_transcriptions", "audio_speech"],
-        config_dir: config,
     }
 }
 
@@ -199,12 +198,6 @@ fn app_icon() -> Option<egui::IconData> {
     eframe::icon_data::from_png_bytes(png).map_err(|e| log::warn!("app icon: {e}")).ok()
 }
 
-/// The version in publik's usage counts: the release tag without its `v`, for example `0.9.0-publik.4`.
-/// The build number comes from `packaging/PUBLIK_BUILD`, the file the bundle version comes from.
-fn publik_version() -> String {
-    format!("{}-publik.{}", env!("CARGO_PKG_VERSION"), include_str!("../../../packaging/PUBLIK_BUILD").trim())
-}
-
 fn main() -> eframe::Result {
     // Windows: the update helper is a copy of this program started with `--finish-update`.
     #[cfg(windows)]
@@ -215,7 +208,7 @@ fn main() -> eframe::Result {
     // and prints one line. The builder who runs it is the consent. Before the logger and the
     // arguments, so the check opens no window and leaves no log file.
     if std::env::var_os("PUBLIK_SELF_TEST").is_some() {
-        println!("{}", soundcraft_ui_egui::ai::self_test(&app_info(config::resolve_config_dir(|name: &str| std::env::var_os(name)))));
+        println!("{}", craft_publik::self_test(&publik::app_info(config::resolve_config_dir(|name: &str| std::env::var_os(name)))));
         return Ok(());
     }
     // First, so every start-up record (and the engine's panic hook, installed with the first
@@ -229,10 +222,9 @@ fn main() -> eframe::Result {
     let (demo, no_audio, control_port) = (launch.demo, launch.no_audio, launch.control_port);
     let files = launch.files;
     log::info!("SoundCraft {}", soundcraft_automation::args::long_version());
-    // publik's usage counts: `app_opened` now, `active_session` every 30 minutes, on a background
-    // thread. After every early exit above (the update helper, the self-test, help, version and
-    // usage errors), so they send nothing.
-    publik_telemetry::start("soundcraft", &publik_version(), None);
+    // publik's usage counts (`app_opened` now, `active_session` every 30 minutes) start once the
+    // gate passed (`publik::app_info`, `craft_publik::ui::Gate`), so the update helper, the
+    // self-test, help, version and usage errors send nothing.
     // The log file lives in the settings directory; opened after the arguments, so `--version`
     // leaves no file behind. Records logged until now are written to it first. Runs without
     // preferences (agents' test runs) log to standard error only, so they don't rotate away the
@@ -309,7 +301,7 @@ fn main() -> eframe::Result {
             if env.prefs_enabled()
                 && let Some(dir) = env.config_dir.clone()
             {
-                let mut ai = soundcraft_ui_egui::ai::Ai::new(app_info(Some(dir)));
+                let mut ai = soundcraft_ui_egui::ai::Ai::new(publik::app_info(Some(dir)));
                 if control_port.is_some() {
                     ai.skip_first_run();
                 }
@@ -327,10 +319,13 @@ fn main() -> eframe::Result {
                     None
                 }
             };
+            // Sign in with publik: provisioning starts now, on a worker thread; `ui` draws it.
+            let gate = craft_publik::ui::Gate::new(publik::app_info(env.config_dir.clone()));
             Ok(Box::new(App(
                 app,
                 logger,
                 env,
+                gate,
                 #[cfg(target_os = "macos")]
                 menu,
             )))

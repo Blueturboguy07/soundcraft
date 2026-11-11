@@ -267,8 +267,11 @@ pub fn frame(app: &mut SoundApp, ctx: &egui::Context) {
     let transcript = take(&mut ai.transcribe, &mut ai.state);
     let speech = take(&mut ai.speech, &mut ai.state);
     ai.frames = ai.frames.saturating_add(1);
-    if !ai.first_run_checked && ai.frames > 3 {
+    // The first launch asks once the publik gate passed and the window is up (a few frames in):
+    // after "Use my own key" at the gate, the own-key form. "Later" ends that for good.
+    if !ai.first_run_checked && ai.frames > 3 && craft_publik::gate::passed() {
         ai.first_run_checked = true;
+        ai.state.reload_credential(); // the gate wrote it after this state was created
         ai.open_setup = ai.state.wants_first_run() || ai.state.owes_first_card();
     }
     if ai.open_setup && quiet {
@@ -1114,7 +1117,7 @@ fn primary(ui: &mut egui::Ui, label: &str, enabled: bool) -> bool {
 
 /// What a window shows when AI is not set up: why, and Set Up AI….
 fn needs_setup(ui: &mut egui::Ui, what: &str, clicks: &mut Clicks) {
-    ui.add(egui::Label::new(format!("{what} needs AI. Set it up first: publik API (no key to paste) or your own key.")).wrap());
+    ui.add(egui::Label::new(format!("{what} needs AI. Set it up first: connect your publik plan (no key to paste) or use your own key.")).wrap());
     ui.add_space(8.0);
     if primary(ui, "Set Up AI…", true) {
         clicks.setup = true;
@@ -1428,6 +1431,8 @@ mod tests {
             name: "SoundCraft",
             version: "0.0.0",
             app_token: "",
+            uses_ai: true,
+            endpoints: craft_publik::Endpoints::DEFAULT,
             dialects: &["audio_transcriptions", "audio_speech"],
             config_dir: Some(dir.join("config")),
         };
@@ -1766,9 +1771,12 @@ mod tests {
         for _ in 0..5 {
             frame(&mut app, &ctx);
         }
-        let ai = app.ai.as_ref().unwrap();
-        // a credential for the test slug may exist or not: the setup window opens when one is owed
-        assert_eq!(ai.setup_window, ai.state.wants_first_run() || ai.state.owes_first_card());
+        // The publik gate holds the first launch's window until it passed; a test has no gate.
+        assert!(!app.ai.as_ref().unwrap().setup_window, "nothing opens before the gate passed");
+        // Once the gate passed, `frame` asks for the setup flow (`open_setup`); ask the same way.
+        app.ai.as_mut().unwrap().open_setup = true;
+        frame(&mut app, &ctx);
+        assert!(app.ai.as_ref().unwrap().setup_window, "the setup window opens once nothing else shows");
         let mut app = demo_app();
         with_ai(&mut app, "first-run-control");
         app.ai.as_mut().unwrap().skip_first_run();
